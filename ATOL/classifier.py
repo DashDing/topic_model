@@ -24,7 +24,7 @@ TOPN = 1
 printKeyword = False
 draw = False
 makeSet = False
-def classifier(TopKeywords = 0,c_train_label = dict(),c_test_label = dict()):
+def classifier(TopKeywords = 0,c_train_label = dict(),c_test_label = dict(),threshold = 0.0):
 
     #train
     #read train data
@@ -35,6 +35,7 @@ def classifier(TopKeywords = 0,c_train_label = dict(),c_test_label = dict()):
     l_train_sorted, k_expert_list = dict2list(k_expert,l_train)
     #word to id
     print 'c_train init, make dic ...'
+
     dic, c_train_id, c_train_label, c_train_m, k_expert_id = word2ID( \
     k_expert_list, c_train_files,l_train_sorted, lamda)
     len_dic = len(dic)
@@ -43,27 +44,31 @@ def classifier(TopKeywords = 0,c_train_label = dict(),c_test_label = dict()):
     print 'find keywords from train set ...'
     M,L = tf_icfFeature(k_expert_id, c_train_id, c_train_m, \
         c_train_label, l_train_sorted, len_dic)
+    dic,M = dimReduce(dic,M,threshold)
+    print len_dic
+    len_dic = len(dic)
+    print len_dic
     k_expert_id_updated = []
-
+    '''
     temp= []
+    for c in xrange(len(l_train_sorted)):
+        if c in L and c == l_train_sorted.index('identity'):
+            l_word = list(M[L.index(c)])
+            temp = sorted(l_word, reverse=True)
+            #temp = temp[0:300]
+            print len(temp)
+
+            keywords = []
+            for weight in temp:
+                if weight >0 :
+                    k = l_word.index(weight)
+                    keywords.append(k)
+                    l_word[k] = 0
+            k_expert_id_updated.append(keywords)
+        else:
+            k_expert_id_updated.append([])
+    '''
     if printKeyword:
-        for c in xrange(len(l_train_sorted)):
-            if c in L and c == l_train_sorted.index('identity'):
-                l_word = list(M[L.index(c)])
-                temp = sorted(l_word, reverse=True)
-                #temp = temp[0:300]
-                print len(temp)
-
-                keywords = []
-                for weight in temp:
-                    if weight >0 :
-                        k = l_word.index(weight)
-                        keywords.append(k)
-                        l_word[k] = 0
-                k_expert_id_updated.append(keywords)
-            else:
-                k_expert_id_updated.append([])
-
         #print k_expert_id_updated
         #for c in xrange(len(k_expert_id_updated)):
         c = l_train_sorted.index('identity')
@@ -84,9 +89,13 @@ def classifier(TopKeywords = 0,c_train_label = dict(),c_test_label = dict()):
     print 'train data -> tf-icf ...'
     d_train = []
     d_train_l = []
+    c_train_files_id = [doc2id(doc, dic, l_train_sorted) for doc in c_train_files]
     for docu in xrange(len(c_train_m)):
-        M,L = tf_icfFeature(k_expert_id_updated, [c_train_id[docu]], [c_train_m[docu]], \
-        [c_train_label[docu]], l_train_sorted, len_dic)
+        content = np.array([0.0 for w in xrange(len_dic)])
+        for i in xrange(len(dic)):
+            content[i] = c_train_files_id[docu].getContent().count(i)
+        M, L = tf_icfFeature(k_expert_id_updated, [content], [c_train_m[docu]], \
+                             [c_train_label[docu]], l_train_sorted, len_dic)
         d_train += M
         d_train_l += L
 
@@ -99,7 +108,6 @@ def classifier(TopKeywords = 0,c_train_label = dict(),c_test_label = dict()):
     #init classifiers(naive bayes/ svm/ LogisticRegression)
     print 'init classifiers ...'
     ml = MultinomialNB()
-    #ml = GaussianNB()
     svm = SVC()
     lr = LogisticRegression()
 
@@ -116,26 +124,18 @@ def classifier(TopKeywords = 0,c_train_label = dict(),c_test_label = dict()):
 
     #score
     print 'testing ...'
-    test_contents = []
-    test_labels = []
     count = 0.0
     right = .0
-
-
-    #laebl-prob
-    label_prob = []
-    temp = sum(c_train_label,[])
-    for i in xrange(len(l_train_sorted)):
-        label_prob.append(temp.count(i))
 
     # predict_proba test
     for c_test_index in xrange(len(c_test_files_id)):
         count += 1
-        content,labels = normalize(c_test_files_id[c_test_index],len_dic)
+        content = []
+        for i in xrange(len(dic)):
+            content.append(c_test_files_id[c_test_index].getContent().count(i))
+        labels = c_test_files_id[c_test_index].getLabels()
         temp_ml = ml.predict_proba([content])[0]
         predict_proba_result_ml = [score for score in temp_ml]
-        for i in xrange(len(predict_proba_result_ml)):
-            predict_proba_result_ml[i] = predict_proba_result_ml[i]/label_prob[i]
         topN = []
         tiao = False
         # nb
@@ -146,7 +146,7 @@ def classifier(TopKeywords = 0,c_train_label = dict(),c_test_label = dict()):
             index_ml = predict_proba_result_ml.index(score)
             predict_proba_result_ml[index_ml] = -1
             topN.append(index_ml)
-        '''
+
         temp_svm = svm.predict([content])
         temp_lr = lr.predict_proba([content])[0]
         predict_proba_result_ml = [score for score in temp_ml]
@@ -175,16 +175,16 @@ def classifier(TopKeywords = 0,c_train_label = dict(),c_test_label = dict()):
         for i in xrange(3):
             topN += [label for label in temp if temp.count(label) == i]
         topN = set(topN[0:3])
-        '''
+
         #print predict_proba_result
         for c in topN:
             if c in labels:
                 right +=1
                 tiao = True
                 break
-        if not tiao:
-            print '{}-{}'.format([l_train_sorted[c] for c in topN],\
-            [l_train_sorted[c] for c in labels])
+        #if not tiao:
+        #    print '{}-{}'.format([l_train_sorted[c] for c in topN],\
+        #    [l_train_sorted[c] for c in labels])
 
     print 'test finished: score {}'.format(right/count)
     return right/count
@@ -215,23 +215,22 @@ def classifier(TopKeywords = 0,c_train_label = dict(),c_test_label = dict()):
         prob = ml.predict_proba(c_unlabel_files_id[c_unlabel_index])
 '''
 
-if __name__ == '__main__':
-
+def main(e):
     # shi ze jiao cha
     c_train_label = dict(c_train_label_default)
     l_train.sort()
     c_train_label_list = []
 
     if makeSet == True:
-        #make 10 pieces train sets
-        f = open('TrainSet.py','w')
+        # make 10 pieces train sets
+        f = open('TrainSet.py', 'w')
         for x in xrange(10):
             temp = dict()
             count = 0
             count2 = 0
             for label in l_train:
                 urls = [w for w in c_train_label if label in c_train_label[w]]
-                num = len(urls)/(10-x)
+                num = len(urls) / (10 - x)
                 count += num
                 ids = []
                 while num > 0 and len(ids) < num:
@@ -246,16 +245,17 @@ if __name__ == '__main__':
             f.write('temp{}='.format(x))
             f.write('{')
             for l in temp:
-                f.write('"{}":["{}"],\n'.format(l,'","'.join(temp[l])))
+                f.write('"{}":["{}"],\n'.format(l, '","'.join(temp[l])))
             f.write('}\n')
             c_train_label_list.append(temp)
-        f.write('def get_c_train_label_list():\n    return [temp0, temp1, temp2, temp3, temp4, temp5, temp6, temp7, temp8, temp9]')
+        f.write(
+            'def get_c_train_label_list():\n    return [temp0, temp1, temp2, temp3, temp4, temp5, temp6, temp7, temp8, temp9]')
     else:
         from TrainSet import get_c_train_label_list
         c_train_label_list = get_c_train_label_list()
     nb = []
 
-    #j means the test set
+    # j means the test set
     for j in xrange(10):
         c_t = dict()
         for i in xrange(10):
@@ -264,7 +264,11 @@ if __name__ == '__main__':
                     c_t[k] = c_train_label_list[i][k]
         c_test = c_train_label_list[j]
         print len(c_test)
-        a = classifier(10,c_train_label=c_t,c_test_label=c_test)
+        a = classifier(10, c_train_label=c_t, c_test_label=c_test,threshold=e)
         nb.append(a)
-        #break
+
     print 'NB:{}\n'.format(nb)
+
+if __name__ == '__main__':
+    for i in xrange(10):
+        main(i/100.0)

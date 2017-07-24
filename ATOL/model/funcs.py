@@ -256,3 +256,25 @@ def drawPic(data, data_label):
             count += 1
     plt.savefig('all_samples.svg')
     plt.show()
+
+def dimReduce(dic,M,threshlod):
+    return_M = []
+    return_Dic = dict()
+    length_M = len(M[0])
+    for l in xrange(len(M)):
+        return_M.append([])
+    idx_new = 0
+    for w in dic:
+        c = int(dic[w])
+        if c >= length_M:
+            continue
+        reduce = True
+        for l in xrange(len(M)):
+            if M[l][c] > threshlod:
+                reduce = False
+        if not reduce:
+            return_Dic[w] = idx_new
+            for l in xrange(len(M)):
+                return_M[l].append(M[l][c])
+            idx_new += 1
+    return return_Dic,return_M

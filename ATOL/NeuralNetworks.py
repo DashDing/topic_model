@@ -66,7 +66,7 @@ def NeuralNetworks(data_set,label_set):
     # train
     trainer = BackpropTrainer(net, ds, momentum= 0.0,verbose= True,weightdecay= 0.0)
     #trainer.train()
-    trainer.trainUntilConvergence(maxEpochs = 200)
+    trainer.trainUntilConvergence(maxEpochs = 5)
     #for i in xrange(200):
     #    trainer.trainEpochs(10)
     #trainresult = percentError(trainer.testOnClassData(),ds['target'])
@@ -109,7 +109,6 @@ def classifier(TopKeywords=0, c_train_label=dict(), c_test_label=dict()):
     net = NeuralNetworks(c_train_id, d_train_l)
     import  time
     print time.localtime()
-    return
     # test
     print 'choice test file ...'
     c_test_files = readFiles(c_test_path, c_test_label)
@@ -168,3 +167,22 @@ if __name__ == '__main__':
         net = NeuralNetworks(data_set,label_set)
         #net.
         print net.activate([1,0])
+        # score
+        print 'testing ...'
+        count = 0.
+        right = .0
+
+        # predict_proba test
+        c_test_files_id = [[1,0],[0,0],[0,1],[1,1]]
+        for c_test_index in xrange(len(c_test_files_id)):
+            count += 1
+            content = c_test_files_id[c_test_index].getContent()
+            labels = c_test_files_id[c_test_index].getLabels()
+            predict_result = net.activate(content)
+            for i in xrange(len(predict_result)):
+                if predict_result[i] >= 0.5 and i in labels:
+                    right += 1
+                    break
+
+        print 'test finished: score {}'.format(right / count)
+        return right / count
